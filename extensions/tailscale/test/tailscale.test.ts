@@ -2,7 +2,7 @@ import { chmod, cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import tailscale, { actions } from '../server.ts'
-import type { Status, TailscaleService } from '../api.ts'
+import type { Status } from '../api.ts'
 import type { ExtensionHost } from '../../../server/extensions.ts'
 import { admit, createAccess } from '../../../server/request-security.ts'
 import { ProjectTrustStore } from '@earendil-works/pi-coding-agent'
@@ -90,7 +90,6 @@ else if (args[0] === 'serve') {
     const cleanups: (() => Promise<void>)[] = []
     const notices: string[] = []
     const access = createAccess()
-    let service: TailscaleService | undefined
     const host = {
       userHome: home,
       home: serverHome,
@@ -101,7 +100,7 @@ else if (args[0] === 'serve') {
       system: () => ({ process: { url: `http://127.0.0.1:${localPort}` } }),
       onOpen: (fn: () => Promise<void>) => openers.push(fn),
       onClose: (fn: () => Promise<void>) => cleanups.push(fn),
-      implement: (_api: unknown, implemented: TailscaleService) => (service = implemented),
+      implement: () => {},
     } as unknown as ExtensionHost
     tailscale(host)
     let closed = false
@@ -120,7 +119,6 @@ else if (args[0] === 'serve') {
       close,
       status: async () =>
         (await actions.status(null, { host } as Parameters<typeof actions.status>[1])) as Status,
-      projectUrls: () => service!.projectUrls(),
     }
   }
   return { home, config, invocations, instance }
@@ -214,7 +212,7 @@ it('serves, verifies the owner login by default, and tears down only its port', 
   expect(await f.invocations()).toContainEqual(['serve', '--https=4747', 'off'])
   expect(
     JSON.parse(await readFile(join(f.home, '.ultimate/tailscale.json'), 'utf8')).ports,
-  ).toEqual({ '/project/a': { port: 4747, owner: expect.stringMatching(/^\d+:/), closed: true } })
+  ).toEqual({ '/project/a': { port: 4747, owner: expect.stringMatching(/^\d+:/) } })
 })
 it.each([
   { name: 'absent', users: {} },
@@ -272,20 +270,6 @@ it('assigns distinct stable ports to two projects even when local ports change',
     'http://127.0.0.1:4750',
   ])
 })
-it('maps live project servers to their tailnet URLs, without previews or a project that turned it off', async () => {
-  const f = await fixture()
-  const a = await f.instance('/project/a', 4747)
-  const b = await f.instance('/project/b', 4800)
-  await f.instance('/project/c', 4801, join(f.home, 'scratch'))
-  expect([...(await a.projectUrls())]).toEqual([
-    ['/project/a', 'https://rog.example.ts.net:4747'],
-    ['/project/b', 'https://rog.example.ts.net:4800'],
-  ])
-  // Its server lives on with the extension off: the rail must not keep linking to the removed mapping.
-  await b.close()
-  expect([...(await a.projectUrls())]).toEqual([['/project/a', 'https://rog.example.ts.net:4747']])
-})
-
 it('replaces a stale own loopback mapping and leaves foreign mappings untouched', async () => {
   const serve = {
     TCP: { '443': { HTTPS: true }, '4747': { HTTPS: true } },

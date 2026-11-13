@@ -12,6 +12,6 @@ A project switcher at the window's left edge: every Ultimate running on this mac
 ## Files
 
 - `server.ts`
-  - `list`, `{}` → `RunningProject[]` (`refs.ts`): the projects `host.projects()` finds running (their supervisor lock is held by a live process), each with its loopback URL and, when Tailscale publishes it, its tailnet URL (`TailscaleApi.projectUrls()`: this server's DNS name and the project's port from the registry, while its server holds it). This instance's `busy` and `questions` come from its own conversations and open questions; every other instance's from its `status` action over loopback, waiting at most 1.5 s. One that does not answer in time is listed without them.
+  - `list`, `{}` → `RunningProject[]` (`refs.ts`): the projects `host.projects()` finds running (their supervisor lock is held by a live process), each with its loopback URL and, while Tailscale publishes it, its tailnet URL. This instance's `busy`, `questions` and tailnet URL come from its own conversations, open questions and `TailscaleApi` status; every other instance's from its `status` and `tailscale` `status` actions over loopback, waiting at most 1.5 s. One that does not answer in time is listed without them.
   - `pin`, `{ pinned? }` → `{ pinned }`: the shared pin, written first when `pinned` is given.
 - `web.tsx`: the rail and the opening bar.

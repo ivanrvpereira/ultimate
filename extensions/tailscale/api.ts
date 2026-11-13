@@ -10,11 +10,6 @@ export type { Status }
 export interface TailscaleService {
   /** This server's current publication status; read `url` for its tailnet address. */
   status(): Status
-  /**
-   * Project root → its tailnet URL, for every project whose server holds its registered port now (temporary homes
-   * left out); empty until this server is published, since the DNS name comes from its own status.
-   */
-  projectUrls(): Promise<Map<string, string>>
 }
 /** Tailnet publication; `want` it, since tailscale is optional. */
 export const TailscaleApi = defineApi<TailscaleService>()('tailscale')

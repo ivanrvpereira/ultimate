@@ -27,48 +27,54 @@ async function own(host: ExtensionHost): Promise<Counts> {
   }
 }
 
-/** Another instance's counts from its `status` action, or nothing when it does not answer in time. */
-async function counts(name: string, url: string, signal: AbortSignal) {
-  const status = (await postAction(
+/** Another instance's answer to an extension's `status` action, or nothing when it does not answer in time. */
+const ask = (name: string, url: string, extension: string, signal: AbortSignal) =>
+  postAction(
     { url, label: name },
-    'status',
+    extension,
     'status',
     {},
     AbortSignal.any([signal, AbortSignal.timeout(STATUS_WAIT)]),
   ).catch(() => {
-    // Down, slow or without the status extension: the rail lists it without live state.
-    return undefined
-  })) as { busy?: unknown; questions?: { count?: unknown } } | undefined
-  const busy = status?.busy
-  const questions = status?.questions?.count
-  return typeof busy === 'number' && typeof questions === 'number' ? { busy, questions } : {}
-}
-
-/** Where the tailnet reaches each project, so a page opened over Tailscale links its tiles there, not to loopback. */
-async function tailnetUrls(host: ExtensionHost) {
-  const tailscale = host.want(TailscaleApi)
-  const urls = await tailscale?.projectUrls().catch(() => {
-    // An unreadable port registry only costs the tailnet links; the rail still lists every project.
+    // Down, slow or without that extension: the rail lists it without what it would have said.
     return undefined
   })
-  return { own: tailscale?.status().url, urls: urls ?? new Map<string, string>() }
+
+/**
+ * Another instance's counts from its `status` action, and its tailnet URL from its `tailscale` status, set only while
+ * it is published there: a page opened over Tailscale links its tile there, since loopback is the visitor's own.
+ */
+async function remote(name: string, url: string, signal: AbortSignal) {
+  const [status, tailscale] = (await Promise.all([
+    ask(name, url, 'status', signal),
+    ask(name, url, 'tailscale', signal),
+  ])) as [
+    { busy?: unknown; questions?: { count?: unknown } } | undefined,
+    { url?: unknown } | undefined,
+  ]
+  const busy = status?.busy
+  const questions = status?.questions?.count
+  const tailnet = tailscale?.url
+  return {
+    ...(typeof tailnet === 'string' && { tailnet }),
+    ...(typeof busy === 'number' && typeof questions === 'number' && { busy, questions }),
+  }
 }
 
 export async function list(host: ExtensionHost, signal: AbortSignal): Promise<RunningProject[]> {
-  const published = await tailnetUrls(host)
   return Promise.all(
-    (await host.projects()).flatMap(({ root, name, running, current }) => {
+    (await host.projects()).flatMap(({ name, running, current }) => {
       // This server answers whether or not a supervisor wrote its port into the lock (a preview's has none).
       const url = current ? host.system().process.url : running?.url
       if (!url) return []
-      const tailnet = current ? published.own : root && published.urls.get(root)
+      const tailnet = current && host.want(TailscaleApi)?.status().url
       return [
         (async () => ({
           name,
           url,
           ...(tailnet && { tailnet }),
           current,
-          ...(current ? await own(host) : await counts(name, url, signal)),
+          ...(current ? await own(host) : await remote(name, url, signal)),
         }))(),
       ]
     }),

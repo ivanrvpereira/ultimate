@@ -24,7 +24,7 @@ The status line's `tailnet` indicator opens a popover with the `status` action, 
 - **disabled:** "off", only while the extension shuts down; turn it on in the Extensions tab.
 - **starting:** a quiet spinner.
 
-Other extensions read the status through `TailscaleApi` (`api.ts`), `host.want(TailscaleApi)?.status()`; `instance` takes the DNS name of its `url` for its previews' tailnet addresses. `projectUrls()` maps each project root whose server holds its registered port to its tailnet URL, for the projects rail; a server that turned the extension off marks its entry `"closed": true`, so it is left out while its process lives on.
+Other extensions read the status through `TailscaleApi` (`api.ts`), `host.want(TailscaleApi)?.status()`; `instance` takes the DNS name of its `url` for its previews' tailnet addresses.
 
 ## On your phone's home screen
 

@@ -37,39 +37,48 @@ it('lists running projects and this one, with their own counts, another instance
 
 // A page opened over Tailscale linked every tile to 127.0.0.1, the visiting device's own loopback (#1009).
 it('links tiles to their tailnet URLs on a page opened over Tailscale, and leaves out the unpublished', async () => {
+  // Each instance answers its `tailscale` status as it stands: one published, one with Tailscale off.
+  const instance = async (tailscale: object) => {
+    const server = createServer((request, response) => {
+      response.setHeader('Content-Type', 'application/json')
+      response.end(
+        JSON.stringify({
+          result: request.url?.includes('/tailscale/')
+            ? tailscale
+            : { busy: 0, questions: { count: 0 } },
+        }),
+      )
+    })
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    return { server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` }
+  }
+  const published = await instance({ state: 'ready', url: 'https://box.example.ts.net:4750' })
+  const off = await instance({ state: 'disabled', allow: [] })
   const host = {
     projects: async () => [
-      { root: '/code/here', name: 'here', current: true },
-      {
-        root: '/code/other',
-        name: 'other',
-        current: false,
-        running: { pid: 2, url: 'http://127.0.0.1:1' },
-      },
-      {
-        root: '/code/local',
-        name: 'local',
-        current: false,
-        running: { pid: 3, url: 'http://127.0.0.1:2' },
-      },
+      { name: 'here', current: true },
+      { name: 'published', current: false, running: { pid: 2, url: published.url } },
+      { name: 'off', current: false, running: { pid: 3, url: off.url } },
     ],
     system: () => ({ process: { url: 'http://127.0.0.1:4747' } }),
     conversations: () => [],
     need: () => ({ openQuestions: async () => [] }),
-    want: () => ({
-      status: () => ({ state: 'ready', url: 'https://box.example.ts.net:4747', allow: [] }),
-      projectUrls: async () => new Map([['/code/other', 'https://box.example.ts.net:4750']]),
-    }),
+    want: () => ({ status: () => ({ state: 'ready', url: 'https://box.example.ts.net:4747' }) }),
   } as unknown as ExtensionHost
-  const projects = await list(host, new AbortController().signal)
-  expect(projects.map((project) => link(project, 'box.example.ts.net'))).toEqual([
-    'https://box.example.ts.net:4747',
-    'https://box.example.ts.net:4750',
-    undefined,
-  ])
-  expect(projects.map((project) => link(project, '127.0.0.1'))).toEqual([
-    'http://127.0.0.1:4747',
-    'http://127.0.0.1:1',
-    'http://127.0.0.1:2',
-  ])
+  try {
+    const projects = await list(host, new AbortController().signal)
+    expect(projects.map((project) => link(project, 'box.example.ts.net'))).toEqual([
+      'https://box.example.ts.net:4747',
+      'https://box.example.ts.net:4750',
+      undefined,
+    ])
+    expect(projects.map((project) => link(project, '127.0.0.1'))).toEqual([
+      'http://127.0.0.1:4747',
+      published.url,
+      off.url,
+    ])
+  } finally {
+    published.server.close()
+    off.server.close()
+  }
 })

@@ -36,13 +36,7 @@ function target(serve: Serve, dns: string, port: number) {
   return proxy && /^http:\/\/127\.0\.0\.1:\d+$/.test(proxy) ? proxy : undefined
 }
 /** A claimed HTTPS port. A project's entry outlives its server so the project keeps its address; another home's does not. */
-type Entry = {
-  port: number
-  owner: string
-  temporary?: true
-  /** Its server closed the publication (the extension was turned off) but lives on, so its pid says nothing. */
-  closed?: true
-}
+type Entry = { port: number; owner: string; temporary?: true }
 export const reloadOnSettings = true
 const statuses = new WeakMap<ExtensionHost, Status>()
 const retries = new WeakMap<ExtensionHost, () => Promise<void>>()
@@ -328,22 +322,7 @@ export default function tailscale(host: ExtensionHost) {
   }
   host.onOpen(begin)
   retries.set(host, begin)
-  host.implement(TailscaleApi, {
-    status: () => status,
-    async projectUrls() {
-      if (!status.url) return new Map<string, string>()
-      const { hostname } = new URL(status.url)
-      // Read without the lock: writes replace the file atomically, and a port claimed meanwhile shows on the next read.
-      const registry = await readJson<{ ports: Record<string, Entry> }>(registryPath, { ports: {} })
-      return new Map(
-        Object.entries(registry.ports ?? {}).flatMap(([root, entry]) =>
-          !entry.temporary && !entry.closed && alive(Number(entry.owner.split(':')[0]))
-            ? [[root, `https://${hostname}:${entry.port}`]]
-            : [],
-        ),
-      )
-    },
-  })
+  host.implement(TailscaleApi, { status: () => status })
   host.onClose(async () => {
     closed = true
     await opening
@@ -356,7 +335,6 @@ export default function tailscale(host: ExtensionHost) {
           if (target(serve, dnsName!, ownedPort!) === localTarget)
             await command(['serve', `--https=${ownedPort}`, 'off'])
           if (temporary) delete value.ports[key]
-          else value.ports[key].closed = true
         })
       } catch (error) {
         fail('error', `Could not remove Serve mapping: ${String(error)}`)
