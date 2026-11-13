@@ -10,6 +10,7 @@ import { readJson, updateJson } from '../../lib/json-file.ts'
 import { postAction } from '../../lib/remote.ts'
 import type { ExtensionHost } from '../../server/extensions.ts'
 import { MessagesApi } from '../messages/api.ts'
+import { TailscaleApi } from '../tailscale/api.ts'
 import { ListAction, PinAction } from './refs.ts'
 import type { RunningProject } from './refs.ts'
 
@@ -43,16 +44,29 @@ async function counts(name: string, url: string, signal: AbortSignal) {
   return typeof busy === 'number' && typeof questions === 'number' ? { busy, questions } : {}
 }
 
+/** Where the tailnet reaches each project, so a page opened over Tailscale links its tiles there, not to loopback. */
+async function tailnetUrls(host: ExtensionHost) {
+  const tailscale = host.want(TailscaleApi)
+  const urls = await tailscale?.projectUrls().catch(() => {
+    // An unreadable port registry only costs the tailnet links; the rail still lists every project.
+    return undefined
+  })
+  return { own: tailscale?.status().url, urls: urls ?? new Map<string, string>() }
+}
+
 export async function list(host: ExtensionHost, signal: AbortSignal): Promise<RunningProject[]> {
+  const published = await tailnetUrls(host)
   return Promise.all(
-    (await host.projects()).flatMap(({ name, running, current }) => {
+    (await host.projects()).flatMap(({ root, name, running, current }) => {
       // This server answers whether or not a supervisor wrote its port into the lock (a preview's has none).
       const url = current ? host.system().process.url : running?.url
       if (!url) return []
+      const tailnet = current ? published.own : root && published.urls.get(root)
       return [
         (async () => ({
           name,
           url,
+          ...(tailnet && { tailnet }),
           current,
           ...(current ? await own(host) : await counts(name, url, signal)),
         }))(),
@@ -71,6 +85,7 @@ const readPin = async (path: string) => {
 export default function projects(host: ExtensionHost) {
   // Resolved where it is called; declared here so the catalogue lists it.
   host.need(MessagesApi)
+  host.want(TailscaleApi)
   return defineExtension({ name: 'projects' })
 }
 

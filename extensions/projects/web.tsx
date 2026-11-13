@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, cn, defineWebExtension, useAction, useExtensions, useViewport } from '@/sdk'
+import { link } from './link.ts'
 import { ListAction, PinAction } from './refs.ts'
 import type { RunningProject } from './refs.ts'
 
@@ -107,14 +108,14 @@ function QuestionBadge({ count, className }: { count: number; className?: string
   )
 }
 
-function Row({ project, wide }: { project: RunningProject; wide: boolean }) {
+function Row({ project, href, wide }: { project: RunningProject; href: string; wide: boolean }) {
   const here = project.current
-  const pending = useOpening() === project.url
+  const pending = useOpening() === href
   const busy = (project.busy ?? 0) > 0
   const questions = project.questions ?? 0
   const title = [
     project.name,
-    `:${port(project.url)}`,
+    `:${port(href)}`,
     questions && `${questions} for you`,
     busy && 'working',
     here && 'this tab',
@@ -132,7 +133,7 @@ function Row({ project, wide }: { project: RunningProject; wide: boolean }) {
         wide && !here && 'hover:bg-sidebar-accent/50',
         wide && here && 'bg-brand/10',
       )}
-      href={here ? undefined : `${project.url}/`}
+      href={here ? undefined : `${href}/`}
       onClick={(event) => {
         // A plain click navigates this tab: mark it. Mod-click and middle-click open another tab and leave this one.
         if (
@@ -144,7 +145,7 @@ function Row({ project, wide }: { project: RunningProject; wide: boolean }) {
           event.altKey
         )
           return
-        setOpening(project.url)
+        setOpening(href)
       }}
       title={title}
     >
@@ -194,7 +195,7 @@ function Row({ project, wide }: { project: RunningProject; wide: boolean }) {
               pending ? 'text-brand' : 'text-muted-foreground/60',
             )}
           >
-            {pending ? 'opening…' : `:${port(project.url)}`}
+            {pending ? 'opening…' : `:${port(href)}`}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {busy && <BusyDot />}
@@ -239,7 +240,11 @@ function Rail() {
   const [pinned, setPinned] = usePinned(other)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
-  const projects = list.data ?? []
+  // Over Tailscale, a project not published there is left out rather than shown as a dead link.
+  const projects = (list.data ?? []).flatMap((project) => {
+    const href = link(project, location.hostname)
+    return href ? [{ project, href }] : []
+  })
   const loading = !list.data && !list.error
   // A list that arrives after the skeleton fades in over it; one already there on mount just shows.
   const waited = useRef(loading).current
@@ -247,8 +252,8 @@ function Rail() {
   if (other || viewport === 'phone' || (!loading && projects.length < 2)) return null
 
   const wide = hover || pinned
-  const questions = projects.reduce((sum, project) => sum + (project.questions ?? 0), 0)
-  const working = projects.filter((project) => (project.busy ?? 0) > 0).length
+  const questions = projects.reduce((sum, { project }) => sum + (project.questions ?? 0), 0)
+  const working = projects.filter(({ project }) => (project.busy ?? 0) > 0).length
 
   return (
     <div className="relative shrink-0" style={{ width: pinned ? WIDE : RAIL }}>
@@ -294,8 +299,8 @@ function Rail() {
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pt-1 pb-2 [scrollbar-width:none]">
           {loading && <RailSkeleton wide={wide} />}
           <div className={cn(waited && 'animate-fade-in')}>
-            {projects.map((project) => (
-              <Row key={project.url} project={project} wide={wide} />
+            {projects.map(({ project, href }) => (
+              <Row href={href} key={project.url} project={project} wide={wide} />
             ))}
           </div>
         </div>

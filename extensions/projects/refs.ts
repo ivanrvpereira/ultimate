@@ -5,6 +5,8 @@ import { actionRef } from '../../shared/extension-api.ts'
 export type RunningProject = {
   name: string
   url: string
+  /** Its address on the tailnet, when this server and that one are both published there. */
+  tailnet?: string
   /** The instance this page shows. */
   current: boolean
   /** Conversations running a turn now; absent when its `status` did not answer. */

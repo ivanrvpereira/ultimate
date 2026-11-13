@@ -46,6 +46,7 @@
     "extensions/sounds/narration.ts",
     "extensions/sounds/speaker.ts",
     "extensions/instance/links.ts",
+    "extensions/projects/link.ts",
     "extensions/update/item.ts",
     "extensions/attachments/limits.ts",
     "extensions/pause/lasted.ts",

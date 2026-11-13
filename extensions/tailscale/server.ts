@@ -322,7 +322,22 @@ export default function tailscale(host: ExtensionHost) {
   }
   host.onOpen(begin)
   retries.set(host, begin)
-  host.implement(TailscaleApi, { status: () => status })
+  host.implement(TailscaleApi, {
+    status: () => status,
+    async projectUrls() {
+      if (!status.url) return new Map<string, string>()
+      const { hostname } = new URL(status.url)
+      // Read without the lock: writes replace the file atomically, and a port claimed meanwhile shows on the next read.
+      const registry = await readJson<{ ports: Record<string, Entry> }>(registryPath, { ports: {} })
+      return new Map(
+        Object.entries(registry.ports ?? {}).flatMap(([root, entry]) =>
+          !entry.temporary && alive(Number(entry.owner.split(':')[0]))
+            ? [[root, `https://${hostname}:${entry.port}`]]
+            : [],
+        ),
+      )
+    },
+  })
   host.onClose(async () => {
     closed = true
     await opening
