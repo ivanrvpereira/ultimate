@@ -1,6 +1,7 @@
 /** Messaging another project's Ultimate: `tell` out, and the `remote` and `remoteReply` actions it posts in. */
 import { randomUUID } from 'node:crypto'
-import type { Context, JsonValue } from '@earendil-works/chord'
+import type { Context } from '@earendil-works/chord/context'
+import type { JsonValue } from '@earendil-works/chord/json'
 import type { EntryId } from '@earendil-works/pi-durable'
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context'
 import { defineDoc, ROOT_CONVERSATION_ID } from '@earendil-works/pi-durable'
@@ -12,6 +13,7 @@ import { discoverAgents } from '../../lib/agents.ts'
 import { Messages, MessageSent } from './api.ts'
 import type { Message } from './api.ts'
 import { append } from './log.ts'
+import { isOpen } from '../../lib/message-state.ts'
 import { remoteLabel, senderName } from './addresses.ts'
 import { delivery } from './delivery.ts'
 
@@ -96,12 +98,7 @@ export async function tell(
       ? []
       : ((await host.harness().snapshot(Messages, ROOT_CONVERSATION_ID, ctx))?.messages ?? [])
   ).find(
-    (m) =>
-      m.from === 'remote' &&
-      m.to === from &&
-      m.reply &&
-      m.remote?.project === target.name &&
-      (m.state === 'sent' || m.state === 'delivered'),
+    (m) => m.from === 'remote' && m.to === from && m.remote?.project === target.name && isOpen(m),
   )
   if (asking)
     throw new Error(

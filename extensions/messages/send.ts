@@ -1,5 +1,5 @@
 /** `send()`: validating, admitting and logging a message, and starting its delivery. */
-import type { Context } from '@earendil-works/chord'
+import type { Context } from '@earendil-works/chord/context'
 import { defineDoc, ROOT_CONVERSATION_ID } from '@earendil-works/pi-durable'
 import type { ConversationId, EntryId, TaskId } from '@earendil-works/pi-durable'
 import type { ExtensionHost } from '../../server/extensions.ts'
@@ -8,6 +8,7 @@ import { Messages, MessageSent } from './api.ts'
 import type { Question } from './api.ts'
 import type { Via } from './refs.ts'
 import { checkQuestions, gist, openQuestion } from './questions.ts'
+import { isOwed } from '../../lib/message-state.ts'
 import { UserInputEvent } from '../../shared/events.ts'
 import type { Device } from '../../shared/events.ts'
 import { resolveImages } from './images.ts'
@@ -35,6 +36,14 @@ const Requests = defineDoc<{ ids: Record<string, number> }>({
   fork: 'initial',
   initial: () => ({ ids: {} }),
 })
+/** The id of the message the tool call `callId` of task `taskId` sent, if its receipt exists. */
+export async function receiptOf(
+  host: ExtensionHost,
+  call: { taskId: TaskId; callId: string },
+  ctx: Context,
+) {
+  return (await host.harness().snapshot(Sent, call.taskId, ctx))?.ids[call.callId]
+}
 /** An answer in a few characters: its picks (`1a 2b,c 3`) when the card numbered them, else its first line. */
 const answerSummary = (text: string) => {
   const lines = text.split('\n').filter((line) => line.trim())
@@ -146,16 +155,15 @@ export async function send(
     if (from !== 'user' && input.reply !== false) {
       const log = await tx.doc(Messages, ROOT_CONVERSATION_ID)
       // Only a message the agent has read is owed; one still queued is unread and gets its own turn.
-      const pending = log.messages.find(
-        (m) => m.to === from && m.from === to && m.reply && m.state === 'delivered',
-      )
+      const pending = log.messages.find((m) => m.to === from && m.from === to && isOwed(m))
       // A message to the user who is owed an answer is that answer, with its questions and images.
       if (pending && to === 'user') {
         pending.state = 'answered'
         re = pending.id
       }
       // An agent messaging a sender whose message it has read and owes an answer is answering: this becomes the reply,
-      // and that message's delivery, seeing it answered, keeps the final answer local.
+      // and that message's delivery, seeing it answered, keeps the final answer local. The call's own `steer` and
+      // `reply` do not apply: an answer is one-way and returns in the reply phase.
       else if (pending) {
         pending.state = 'answered'
         const response = await append(tx, {

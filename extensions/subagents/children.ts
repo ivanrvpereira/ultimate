@@ -10,7 +10,8 @@ import type {
 } from '@earendil-works/pi-durable'
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent'
 import type { ExtensionHost } from '../../server/extensions.ts'
-import { definitionAgent } from '../../lib/agents.ts'
+import { definitionAgent, definitionFamily } from '../../lib/agents.ts'
+import { Family } from '../models/api.ts'
 import type { AgentDefinition } from '../../lib/agents.ts'
 import { ConversationsApi } from '../conversations/api.ts'
 import { Started } from './refs.ts'
@@ -37,6 +38,29 @@ export async function started(
     ...(thinkingLevel ? { thinking: thinkingLevel } : {}),
     ...(parent === undefined ? {} : { parent }),
   })
+}
+
+/**
+ * Configure existing conversation `id` from `definition` over `parent`: its current tools, extensions and instructions,
+ * while the model and thinking chosen in it stay unless the definition pins them. Its cwd stays.
+ */
+export async function reconfigure(
+  tx: Tx,
+  id: ConversationId,
+  definition: AgentDefinition,
+  parent: Agent,
+  modelRuntime: ModelRuntime,
+) {
+  const own = await tx.doc(AgentDoc, id)
+  const base = {
+    ...parent,
+    ...(own.model ? { model: own.model } : {}),
+    ...(own.thinkingLevel ? { thinkingLevel: own.thinkingLevel } : {}),
+  }
+  const change = definitionAgent(definition, base, modelRuntime)
+  await configure(tx, id, change)
+  ;(await tx.doc(Family, id)).name = definitionFamily(definition, change)
+  ;(await tx.doc(Profile, id)).definition = definition.name
 }
 
 /**
@@ -75,6 +99,10 @@ export async function createChild(
     ...change,
     cwd: options.cwd ?? parent.cwd ?? null,
   })
+  // An explicit model is no family's; a fork would otherwise keep its parent's.
+  ;(await tx.doc(Family, child.id)).name = options.model
+    ? null
+    : definitionFamily(definition, change)
   Object.assign(await tx.doc(options.metadata, child.id), {
     label: options.label,
     title: options.title,
