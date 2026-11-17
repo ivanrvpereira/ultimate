@@ -1,6 +1,6 @@
 import { CodeIcon, Maximize2Icon, WorkflowIcon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Suspense, use, useId, useLayoutEffect, useMemo, useState } from 'react'
+import { Suspense, use, useLayoutEffect, useMemo, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import { CodeBlock, CodeBlockContainer, CodeBlockCopyButton, CodeBlockHeader } from 'streamdown'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -49,31 +49,21 @@ function Actions({ children }: { children: ReactNode }) {
   )
 }
 
-type DrawingProps = {
-  code: string
-  mount: Pele['mount']
-  idPrefix: string
-  zoom: boolean
-  className: string
-}
+type DrawingProps = { code: string; mount: Pele['mount']; zoom: boolean; className: string }
 
-/**
- * Pele drawing into its element, laid out for the element's width and again when it resizes: below 640 px a
- * left-to-right chart too wide for it turns top-to-bottom when that is narrower, and what is still too wide shrinks.
- */
-function Drawing({ code, mount, idPrefix, zoom, className }: DrawingProps) {
+/** Pele drawing into its element, laid out for the element's width and again when it resizes. */
+function Drawing({ code, mount, zoom, className }: DrawingProps) {
   const [element, setElement] = useState<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
     if (!element) return undefined
-    const mounted = mount(element, code, { fontSize: 14, idPrefix, zoom: zoom && { always: true } })
+    const mounted = mount(element, code, { fontSize: 14, zoom })
     return () => mounted.destroy()
-  }, [code, element, idPrefix, mount, zoom])
+  }, [code, element, mount, zoom])
   return <div className={`${className} ${theme}`} ref={setElement} />
 }
 
 function Diagram({ code, core }: { code: string; core: ReactNode }) {
   const { mount, render } = use(loadPele())
-  const idPrefix = `mermaid-${useId().replace(/\W/g, '')}-`
   const parses = useMemo(() => {
     try {
       return !!render(code)
@@ -107,7 +97,6 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
             <Drawing
               className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6 [--pele-zoom-bottom:12px] [--pele-zoom-right:12px] [--pele-zoom-top:auto] [&_svg]:max-h-full"
               code={code}
-              idPrefix={`${idPrefix}expanded-`}
               mount={mount}
               zoom
             />
@@ -119,7 +108,6 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
       <Drawing
         className="px-3 pt-1 pb-3 [&_svg]:mx-auto [&_svg]:block"
         code={code}
-        idPrefix={idPrefix}
         mount={mount}
         zoom={false}
       />
