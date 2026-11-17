@@ -7,20 +7,17 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { defineWebExtension } from '@/sdk'
 import type { CodeBlockRenderer } from '@/sdk'
 
-// Pele (about 230 kB gzipped) loads when a page first shows a finished diagram, not with the app.
 type Pele = typeof import('pele')
 let pele: Promise<Pele> | undefined
-const loadPele = () => (pele ??= import('pele'))
+const loadPeleOnFirstDiagram = () => (pele ??= import('pele'))
 
-/** Pele's colours in the theme's tokens; CSS variables, so a theme switch needs no new render. */
-const theme =
+const peleColoursFromThemeVariables =
   '[--pele-bg:var(--terminal)] [--pele-fg:var(--foreground)] [--pele-muted:var(--muted-foreground)] ' +
   '[--pele-line:var(--muted-foreground)] [--pele-surface:var(--card)] [--pele-surface-alt:var(--accent)] ' +
   '[--pele-border:var(--input)] [--pele-accent:var(--brand)]'
 
 type IconButtonProps = ComponentProps<'button'> & { icon: LucideIcon; label: string }
 
-/** Props pass through, so a `DialogTrigger asChild` can wire it up. */
 function IconButton({ icon: Icon, label, ...props }: IconButtonProps) {
   return (
     <button
@@ -35,8 +32,7 @@ function IconButton({ icon: Icon, label, ...props }: IconButtonProps) {
   )
 }
 
-/** The code block's own actions box, top right, as Streamdown's `CodeBlock` draws it. */
-function Actions({ children }: { children: ReactNode }) {
+function StreamdownCodeBlockActions({ children }: { children: ReactNode }) {
   return (
     <div className="pointer-events-none absolute top-2 right-2 z-10 flex items-center">
       <div
@@ -51,7 +47,6 @@ function Actions({ children }: { children: ReactNode }) {
 
 type DrawingProps = { code: string; mount: Pele['mount']; zoom: boolean; className: string }
 
-/** Pele drawing into its element, laid out for the element's width and again when it resizes. */
 function Drawing({ code, mount, zoom, className }: DrawingProps) {
   const [element, setElement] = useState<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
@@ -59,11 +54,11 @@ function Drawing({ code, mount, zoom, className }: DrawingProps) {
     const mounted = mount(element, code, { fontSize: 14, zoom })
     return () => mounted.destroy()
   }, [code, element, mount, zoom])
-  return <div className={`${className} ${theme}`} ref={setElement} />
+  return <div className={`${className} ${peleColoursFromThemeVariables}`} ref={setElement} />
 }
 
 function Diagram({ code, core }: { code: string; core: ReactNode }) {
-  const { mount, render } = use(loadPele())
+  const { mount, render } = use(loadPeleOnFirstDiagram())
   const parses = useMemo(() => {
     try {
       return !!render(code)
@@ -83,8 +78,7 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
   return (
     <CodeBlockContainer language="mermaid">
       <CodeBlockHeader language="mermaid" />
-      <Actions>
-        {/* The trigger inside the dialog's root, so closing it returns focus to the button. */}
+      <StreamdownCodeBlockActions>
         <Dialog>
           <DialogTrigger asChild>
             <IconButton icon={Maximize2Icon} label="Expand" />
@@ -104,7 +98,7 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
         </Dialog>
         <IconButton icon={CodeIcon} label="Show code" onClick={() => setSource(true)} />
         <CodeBlockCopyButton code={code} />
-      </Actions>
+      </StreamdownCodeBlockActions>
       <Drawing
         className="px-3 pt-1 pb-3 [&_svg]:mx-auto [&_svg]:block"
         code={code}
@@ -115,7 +109,6 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
   )
 }
 
-/** A diagram once the block is complete and parses; until then, or when Pele cannot read it, the plain code. */
 const Mermaid: CodeBlockRenderer = ({ code, core, incomplete }) =>
   incomplete ? (
     core
