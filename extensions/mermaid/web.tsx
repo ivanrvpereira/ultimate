@@ -1,9 +1,9 @@
 import { CodeIcon, Maximize2Icon, WorkflowIcon } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Suspense, use, useId, useLayoutEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { CodeBlock, CodeBlockContainer, CodeBlockCopyButton, CodeBlockHeader } from 'streamdown'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { defineWebExtension } from '@/sdk'
 import type { CodeBlockRenderer } from '@/sdk'
 
@@ -18,22 +18,17 @@ const theme =
   '[--pele-line:var(--muted-foreground)] [--pele-surface:var(--card)] [--pele-surface-alt:var(--accent)] ' +
   '[--pele-border:var(--input)] [--pele-accent:var(--brand)]'
 
-function IconButton({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  onClick: () => void
-}) {
+type IconButtonProps = ComponentProps<'button'> & { icon: LucideIcon; label: string }
+
+/** Props pass through, so a `DialogTrigger asChild` can wire it up. */
+function IconButton({ icon: Icon, label, ...props }: IconButtonProps) {
   return (
     <button
       aria-label={label}
       className="cursor-pointer p-1 text-muted-foreground transition-all hover:text-foreground"
-      onClick={onClick}
       title={label}
       type="button"
+      {...props}
     >
       <Icon aria-hidden size={14} />
     </button>
@@ -87,7 +82,6 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
     }
   }, [code, render])
   const [source, setSource] = useState(false)
-  const [expanded, setExpanded] = useState(false)
   if (!parses) return core
   if (source)
     return (
@@ -100,7 +94,25 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
     <CodeBlockContainer language="mermaid">
       <CodeBlockHeader language="mermaid" />
       <Actions>
-        <IconButton icon={Maximize2Icon} label="Expand" onClick={() => setExpanded(true)} />
+        {/* The trigger inside the dialog's root, so closing it returns focus to the button. */}
+        <Dialog>
+          <DialogTrigger asChild>
+            <IconButton icon={Maximize2Icon} label="Expand" />
+          </DialogTrigger>
+          <DialogContent
+            aria-describedby={undefined}
+            className="flex h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 bg-terminal p-0 sm:max-w-[calc(100vw-4rem)]"
+          >
+            <DialogTitle className="sr-only">Mermaid diagram</DialogTitle>
+            <Drawing
+              className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6 [--pele-zoom-bottom:12px] [--pele-zoom-right:12px] [--pele-zoom-top:auto] [&_svg]:max-h-full"
+              code={code}
+              idPrefix={`${idPrefix}expanded-`}
+              mount={mount}
+              zoom
+            />
+          </DialogContent>
+        </Dialog>
         <IconButton icon={CodeIcon} label="Show code" onClick={() => setSource(true)} />
         <CodeBlockCopyButton code={code} />
       </Actions>
@@ -111,21 +123,6 @@ function Diagram({ code, core }: { code: string; core: ReactNode }) {
         mount={mount}
         zoom={false}
       />
-      <Dialog onOpenChange={setExpanded} open={expanded}>
-        <DialogContent
-          aria-describedby={undefined}
-          className="flex h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 bg-terminal p-0 sm:max-w-[calc(100vw-4rem)]"
-        >
-          <DialogTitle className="sr-only">Mermaid diagram</DialogTitle>
-          <Drawing
-            className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-6 [--pele-zoom-bottom:12px] [--pele-zoom-right:12px] [--pele-zoom-top:auto] [&_svg]:max-h-full"
-            code={code}
-            idPrefix={`${idPrefix}expanded-`}
-            mount={mount}
-            zoom
-          />
-        </DialogContent>
-      </Dialog>
     </CodeBlockContainer>
   )
 }
